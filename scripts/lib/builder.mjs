@@ -119,7 +119,7 @@ async function shouldPassViteBaseFlag(project) {
 
   for (const name of ['vite.config.ts', 'vite.config.mjs', 'vite.config.js']) {
     const text = await readTextOptional(path.join(project.absPath, name));
-    if (text && /\bbase\s*:/.test(text)) {
+    if (text && /(?:\bbase\s*:|\{\s*base\b|,\s*base\b)/.test(text)) {
       return false;
     }
   }

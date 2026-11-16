@@ -1,0 +1,6 @@
+{
+  "name": "Project Stuntman: HK Ragdoll Action Simulator",
+  "description": "Процедурная симуляция боевика в стиле Джеки Чана с физикой активного рэгдолла, интерактивным окружением и акробатическими трюками.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
