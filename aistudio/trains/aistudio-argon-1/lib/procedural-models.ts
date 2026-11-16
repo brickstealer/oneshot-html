@@ -433,9 +433,10 @@ export function createLocomotiveModel(assets: SharedSceneAssets): {
   lampRight.position.x = -0.78;
   group.add(lampRight);
 
+  // Orient apex at the headlamp (z = 0) and flare outward toward +Z (ahead of locomotive)
   const beamGeo = new THREE.ConeGeometry(3.2, 18.0, 16, 1, true);
-  beamGeo.rotateX(Math.PI / 2);
-  beamGeo.translate(0, -0.4, 9.5);
+  beamGeo.rotateX(-Math.PI / 2);
+  beamGeo.translate(0, 0, 9.0);
   const beamMat = new THREE.MeshBasicMaterial({
     color: 0xfef08a,
     transparent: true,
@@ -446,6 +447,7 @@ export function createLocomotiveModel(assets: SharedSceneAssets): {
   });
   const headlightBeamMesh = new THREE.Mesh(beamGeo, beamMat);
   headlightBeamMesh.position.set(0, 1.15, 6.2);
+  headlightBeamMesh.rotation.x = 0.045;
   group.add(headlightBeamMesh);
 
   const headlightSpot = new THREE.SpotLight(0xfef08a, 4.5, 65, Math.PI / 5, 0.6, 1.5);
