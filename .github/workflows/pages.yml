@@ -1,0 +1,77 @@
+name: Build and Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable Corepack (pnpm / yarn)
+        run: corepack enable
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache package manager stores
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.bun/install/cache
+            ~/.cache/pnpm
+            ~/.yarn
+          key: ${{ runner.os }}-pkg-cache-${{ hashFiles('**/package-lock.json', '**/bun.lock', '**/bun.lockb', '**/pnpm-lock.yaml', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pkg-cache-
+
+      - name: Run orchestrator tests and project checks
+        run: |
+          npm test
+          npm run discover
+          npm run check
+
+      - name: Build static showcase and all projects
+        run: node scripts/build-pages.mjs --base-path "${{ steps.pages.outputs.base_path }}" --strict-pm
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

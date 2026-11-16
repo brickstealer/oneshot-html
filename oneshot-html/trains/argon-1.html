@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Бесконечный Экспресс — 3D Процедурный Симулятор Поезда</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Google Fonts Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090d16;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      touch-action: none;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom Glassmorphism */
+    .glass-panel {
+      background: rgba(12, 18, 30, 0.68);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+    }
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .glass-pill:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .glass-pill:active {
+      transform: scale(0.95);
+    }
+    .glass-pill.active {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.9), rgba(217, 119, 6, 0.9));
+      border-color: rgba(253, 224, 71, 0.6);
+      color: #090d16;
+      font-weight: 700;
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.45);
+    }
+    .biome-pill.active {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.9));
+      border-color: rgba(110, 231, 183, 0.6);
+      color: #06130e;
+      font-weight: 700;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+    }
+    /* Custom Range Slider */
+    input[type=range].train-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type=range].train-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #f59e0b;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 10px rgba(245, 158, 11, 0.7);
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    input[type=range].train-slider::-webkit-slider-thumb:active {
+      transform: scale(1.2);
+    }
+    /* Hide scrollbars on horizontal pill lists */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    /* Cinematic Letterbox Bars & Vignette */
+    .cinematic-vignette {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      background: radial-gradient(circle at center, transparent 58%, rgba(4, 7, 15, 0.55) 100%);
+    }
+    /* Shot transition flash */
+    #camera-cut-fade {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      background: #060911;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+  </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+  <!-- 3D WebGL Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Subtle Cinematic Vignette & Cut Transition -->
+  <div class="cinematic-vignette"></div>
+  <div id="camera-cut-fade"></div>
+
+  <!-- HUD OVERLAY -->
+  <div id="hud-wrapper" class="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-2.5 sm:p-4 md:p-6">
+
+    <!-- TOP TELEMETRY & STATUS BAR -->
+    <header class="w-full flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+      <!-- Left: Brand + Current Biome Badge -->
+      <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+          </span>
+          <span class="text-xs sm:text-sm font-bold tracking-wider uppercase text-amber-400">Экспресс «Восток»</span>
+        </div>
+        <div class="h-4 w-[1px] bg-white/15"></div>
+        <div class="flex items-center gap-1.5">
+          <span id="biome-icon" class="text-base">🌲</span>
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Биом</div>
+            <div id="biome-label" class="text-xs sm:text-sm font-semibold text-white leading-tight">Густой лес</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center/Right: Telemetry (Speed, Elevation, Active Camera, Collapse HUD) -->
+      <div class="flex items-center gap-2">
+        <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3 sm:gap-4">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Скорость</div>
+            <div class="font-mono-tech text-xs sm:text-sm font-bold text-amber-400">
+              <span id="speed-readout">85</span> <span class="text-[10px] text-slate-300 font-normal">км/ч</span>
+            </div>
+          </div>
+          <div class="h-4 w-[1px] bg-white/15"></div>
+          <div class="hidden xs:block sm:block">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Высота</div>
+            <div class="font-mono-tech text-xs sm:text-sm font-bold text-emerald-400">
+              <span id="altitude-readout">12</span> <span class="text-[10px] text-slate-300 font-normal">м</span>
+            </div>
+          </div>
+          <div class="h-4 w-[1px] bg-white/15 hidden sm:block"></div>
+          <div class="hidden sm:block">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Ракурс</div>
+            <div id="cam-readout" class="text-xs font-semibold text-sky-300">Авто-Режиссёр</div>
+          </div>
+        </div>
+
+        <!-- Toggle HUD Visibility Button (For pure cinematic view) -->
+        <button id="btn-toggle-hud" title="Скрыть/Показать интерфейс" class="glass-panel rounded-2xl p-2.5 text-slate-200 hover:text-amber-400 active:scale-95 transition">
+          <svg id="icon-eye-open" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!--Interactive Hint Toast (Fades out after a few seconds) -->
+    <div id="touch-hint" class="self-center glass-panel rounded-full px-4 py-1.5 text-xs text-slate-300 flex items-center gap-2 transition-opacity duration-700 opacity-90 pointer-events-none">
+      <span>👆 Вращайте камеру пальцем / мышью • Щипок для зума</span>
+    </div>
+
+    <!-- BOTTOM MOBILE-FIRST CONTROL DOCK -->
+    <footer id="bottom-dock" class="w-full max-w-3xl mx-auto pointer-events-auto transition-all duration-300">
+      <div class="glass-panel rounded-3xl p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3">
+
+        <!-- Row 1: Camera Director Modes (Horizontal scrollable pills on mobile) -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1 shrink-0">🎬 Камера:</span>
+          <button data-cam="auto" class="cam-btn glass-pill active rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0 flex items-center gap-1.5">
+            <span>✨ Авто-Режиссёр</span>
+          </button>
+          <button data-cam="orbit" class="cam-btn glass-pill rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0">
+            🛸 Свободный дрон
+          </button>
+          <button data-cam="flyby" class="cam-btn glass-pill rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0">
+            💨 Пролёт у рельс
+          </button>
+          <button data-cam="wheel" class="cam-btn glass-pill rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0">
+            ⚙️ Колёсная пара
+          </button>
+          <button data-cam="heli" class="cam-btn glass-pill rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0">
+            🚁 Вертолёт
+          </button>
+          <button data-cam="cabin" class="cam-btn glass-pill rounded-xl px-3 py-1.5 text-xs whitespace-nowrap shrink-0">
+            🪟 Из окна вагона
+          </button>
+        </div>
+
+        <!-- Row 2: Biome Selector & Time of Day -->
+        <div class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1 shrink-0">🌍 Мир:</span>
+            <button data-biome="auto" class="biome-pill glass-pill active rounded-xl px-2.5 py-1 text-xs whitespace-nowrap shrink-0">
+              🔄 Авто-смена
+            </button>
+            <button data-biome="0" class="biome-pill glass-pill rounded-xl px-2.5 py-1 text-xs whitespace-nowrap shrink-0">
+              🌲 Лес
+            </button>
+            <button data-biome="1" class="biome-pill glass-pill rounded-xl px-2.5 py-1 text-xs whitespace-nowrap shrink-0">
+              🏡 Деревня
+            </button>
+            <button data-biome="2" class="biome-pill glass-pill rounded-xl px-2.5 py-1 text-xs whitespace-nowrap shrink-0">
+              🌆 Мегаполис
+            </button>
+            <button data-biome="3" class="biome-pill glass-pill rounded-xl px-2.5 py-1 text-xs whitespace-nowrap shrink-0">
+              🏔️ Серпантин
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 3: Speed Slider + Time of Day + Audio + Train Horn -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center pt-1 border-t border-white/10">
+          <!-- Speed Control -->
+          <div class="sm:col-span-5 flex items-center gap-3 bg-white/5 rounded-2xl px-3 py-2">
+            <span class="text-xs font-medium text-slate-300 whitespace-nowrap">⚡ Тяга</span>
+            <input id="speed-slider" type="range" min="0" max="160" value="85" class="train-slider" />
+            <span id="slider-val" class="font-mono-tech text-xs font-bold text-amber-400 w-9 text-right">85</span>
+          </div>
+
+          <!-- Action Buttons: Time of Day, Audio Mute/Unmute, Horn -->
+          <div class="sm:col-span-7 flex items-center justify-between sm:justify-end gap-2">
+            <!-- Time of Day Cycle Button -->
+            <button id="btn-time" class="glass-pill flex-1 sm:flex-initial rounded-2xl px-3.5 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-100">
+              <span id="time-icon">🌅</span>
+              <span id="time-label">Закат</span>
+            </button>
+
+            <!-- Procedural Sound Toggle -->
+            <button id="btn-audio" class="glass-pill flex-1 sm:flex-initial rounded-2xl px-3.5 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-100">
+              <span id="audio-icon">🔇</span>
+              <span id="audio-label">Звук Выкл</span>
+            </button>
+
+            <!-- Train Horn Button -->
+            <button id="btn-horn" class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 active:scale-95 text-slate-950 font-bold rounded-2xl px-4 py-2 text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 transition shrink-0">
+              <span>📯</span>
+              <span>Гудок</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- MAIN APPLICATION SCRIPT -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ==========================================
+      // 1. DETERMINISTIC NOISE & MATH HELPERS
+      // ==========================================
+      const MathUtils = {
+        clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
+        lerp: (a, b, t) => a + (b - a) * t,
+        smoothstep: (edge0, edge1, x) => {
+          const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+          return t * t * (3 - 2 * t);
+        },
+        // Fast deterministic 2D value noise for terrain sculpting
+        hash2: (x, y) => {
+          let n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+          return n - Math.floor(n);
+        },
+        noise2D: function (x, y) {
+          const ix = Math.floor(x);
+          const iy = Math.floor(y);
+          const fx = x - ix;
+          const fy = y - iy;
+          const ux = fx * fx * (3.0 - 2.0 * fx);
+          const uy = fy * fy * (3.0 - 2.0 * fy);
+          const a = this.hash2(ix, iy);
+          const b = this.hash2(ix + 1, iy);
+          const c = this.hash2(ix, iy + 1);
+          const d = this.hash2(ix + 1, iy + 1);
+          return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+        },
+        fbm2D: function (x, y, octaves = 3) {
+          let val = 0;
+          let amp = 0.5;
+          let freq = 1.0;
+          for (let i = 0; i < octaves; i++) {
+            val += amp * (this.noise2D(x * freq, y * freq) * 2.0 - 1.0);
+            freq *= 2.05;
+            amp *= 0.5;
+          }
+          return val;
+        }
+      };
+
+      // ==========================================
+      // 2. BIOME & TIME OF DAY CONFIGURATIONS
+      // ==========================================
+      const BIOMES = [
+        {
+          id: 0,
+          name: 'Густой лес',
+          icon: '🌲',
+          groundBase: new THREE.Color(0x284e2a),
+          groundAlt: new THREE.Color(0x3d6b34),
+          rockColor: new THREE.Color(0x5c6460),
+          curveAmp: 14.0,
+          elevAmp: 3.5,
+          baseElevation: 6.0
+        },
+        {
+          id: 1,
+          name: 'Деревня',
+          icon: '🏡',
+          groundBase: new THREE.Color(0x4a6b32),
+          groundAlt: new THREE.Color(0x6b7f39),
+          rockColor: new THREE.Color(0x7a7267),
+          curveAmp: 11.0,
+          elevAmp: 2.0,
+          baseElevation: 5.0
+        },
+        {
+          id: 2,
+          name: 'Мегаполис',
+          icon: '🌆',
+          groundBase: new THREE.Color(0x242936),
+          groundAlt: new THREE.Color(0x323949),
+          rockColor: new THREE.Color(0x4b5563),
+          curveAmp: 9.0,
+          elevAmp: 1.2,
+          baseElevation: 5.5
+        },
+        {
+          id: 3,
+          name: 'Горный серпантин',
+          icon: '🏔️',
+          groundBase: new THREE.Color(0x475059),
+          groundAlt: new THREE.Color(0x646e78),
+          rockColor: new THREE.Color(0x3a4149),
+          curveAmp: 26.0,
+          elevAmp: 11.5,
+          baseElevation: 22.0
+        }
+      ];
+
+      const TIME_PRESETS = [
+        {
+          id: 'sunset',
+          name: 'Закат',
+          icon: '🌅',
+          skyTop: new THREE.Color(0x1e2952),
+          skyHorizon: new THREE.Color(0xe07a47),
+          fogColor: new THREE.Color(0xc86d51),
+          fogDensity: 0.0028,
+          sunColor: new THREE.Color(0xff9e5e),
+          sunIntensity: 1.45,
+          sunPos: new THREE.Vector3(-120, 48, -90),
+          hemiSky: new THREE.Color(0xfba979),
+          hemiGround: new THREE.Color(0x2c2238),
+          hemiIntensity: 0.65,
+          windowEmission: 0.75,
+          headlightPower: 1.6,
+          starOpacity: 0.15
+        },
+        {
+          id: 'night',
+          name: 'Полночь',
+          icon: '🌙',
+          skyTop: new THREE.Color(0x040711),
+          skyHorizon: new THREE.Color(0x0f1b33),
+          fogColor: new THREE.Color(0x091122),
+          fogDensity: 0.0032,
+          sunColor: new THREE.Color(0x6088cc),
+          sunIntensity: 0.38,
+          sunPos: new THREE.Vector3(80, 95, -60),
+          hemiSky: new THREE.Color(0x22365e),
+          hemiGround: new THREE.Color(0x080c14),
+          hemiIntensity: 0.35,
+          windowEmission: 1.0,
+          headlightPower: 3.4,
+          starOpacity: 0.95
+        },
+        {
+          id: 'dawn',
+          name: 'Рассвет',
+          icon: '🌫️',
+          skyTop: new THREE.Color(0x2b4162),
+          skyHorizon: new THREE.Color(0xd8a7b1),
+          fogColor: new THREE.Color(0xb69aa8),
+          fogDensity: 0.0044,
+          sunColor: new THREE.Color(0xffd2b8),
+          sunIntensity: 1.05,
+          sunPos: new THREE.Vector3(110, 38, -80),
+          hemiSky: new THREE.Color(0xe2b6cf),
+          hemiGround: new THREE.Color(0x353d4f),
+          hemiIntensity: 0.72,
+          windowEmission: 0.4,
+          headlightPower: 1.2,
+          starOpacity: 0.05
+        },
+        {
+          id: 'noon',
+          name: 'Полдень',
+          icon: '☀️',
+          skyTop: new THREE.Color(0x1f66ad),
+          skyHorizon: new THREE.Color(0x8ec5fc),
+          fogColor: new THREE.Color(0x84b6e8),
+          fogDensity: 0.0021,
+          sunColor: new THREE.Color(0xfffbeb),
+          sunIntensity: 1.55,
+          sunPos: new THREE.Vector3(60, 140, 40),
+          hemiSky: new THREE.Color(0xbbe0ff),
+          hemiGround: new THREE.Color(0x3a4c39),
+          hemiIntensity: 0.85,
+          windowEmission: 0.08,
+          headlightPower: 0.25,
+          starOpacity: 0.0
+        }
+      ];
+
+      // ==========================================
+      // 3. PROCEDURAL WEB AUDIO ENGINE
+      // ==========================================
+      class TrainAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.enabled = false;
+          this.masterGain = null;
+          this.windGain = null;
+          this.windFilter = null;
+          this.rumbleGain = null;
+          this.noiseBuffer = null;
+          this.stepAccumulator = 0;
+          this.bogiePhase = 0;
+        }
+
+        init() {
+          if (this.ctx) return;
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = 0.7;
+          this.masterGain.connect(this.ctx.destination);
+
+          // Create 2-second white/pink noise buffer
+          const bufferSize = this.ctx.sampleRate * 2;
+          this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const data = this.noiseBuffer.getChannelData(0);
+          let b0 = 0, b1 = 0, b2 = 0;
+          for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            b0 = 0.99765 * b0 + white * 0.0990460;
+            b1 = 0.96300 * b1 + white * 0.2965164;
+            b2 = 0.57000 * b2 + white * 1.0526913;
+            data[i] = (b0 + b1 + b2 + white * 0.1848) * 0.12;
+          }
+
+          // Continuous ambient wind & rail rolling hum
+          const windSource = this.ctx.createBufferSource();
+          windSource.buffer = this.noiseBuffer;
+          windSource.loop = true;
+
+          this.windFilter = this.ctx.createBiquadFilter();
+          this.windFilter.type = 'bandpass';
+          this.windFilter.frequency.value = 280;
+          this.windFilter.Q.value = 1.8;
+
+          this.windGain = this.ctx.createGain();
+          this.windGain.gain.value = 0.0;
+
+          windSource.connect(this.windFilter);
+          this.windFilter.connect(this.windGain);
+          this.windGain.connect(this.masterGain);
+          windSource.start();
+
+          // Continuous low engine rumble
+          const rumbleOsc = this.ctx.createOscillator();
+          rumbleOsc.type = 'sawtooth';
+          rumbleOsc.frequency.value = 42;
+
+          const rumbleFilter = this.ctx.createBiquadFilter();
+          rumbleFilter.type = 'lowpass';
+          rumbleFilter.frequency.value = 95;
+
+          this.rumbleGain = this.ctx.createGain();
+          this.rumbleGain.gain.value = 0.0;
+
+          rumbleOsc.connect(rumbleFilter);
+          rumbleFilter.connect(this.rumbleGain);
+          this.rumbleGain.connect(this.masterGain);
+          rumbleOsc.start();
+        }
+
+        toggle() {
+          if (!this.ctx) this.init();
+          if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+          this.enabled = !this.enabled;
+          if (!this.enabled && this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.08);
+          } else if (this.enabled && this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(0.75, this.ctx.currentTime, 0.1);
+          }
+          return this.enabled;
+        }
+
+        // Trigger a realistic rail joint clack ("тук-тук ... тук-тук")
+        triggerRailClack(speedRatio, isSecondAxle = false) {
+          if (!this.enabled || !this.ctx) return;
+          const now = this.ctx.currentTime;
+
+          // Short metallic percussive burst
+          const src = this.ctx.createBufferSource();
+          src.buffer = this.noiseBuffer;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(isSecondAxle ? 520 : 620, now);
+          filter.Q.setValueAtTime(3.2, now);
+
+          const env = this.ctx.createGain();
+          const peak = MathUtils.clamp(0.08 + speedRatio * 0.22, 0.05, 0.32) * (isSecondAxle ? 0.8 : 1.0);
+          env.gain.setValueAtTime(0.001, now);
+          env.gain.exponentialRampToValueAtTime(peak, now + 0.008);
+          env.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+
+          src.connect(filter);
+          filter.connect(env);
+          env.connect(this.masterGain);
+
+          src.start(now);
+          src.stop(now + 0.085);
+
+          // Low wooden sleeper thump
+          const osc = this.ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(isSecondAxle ? 82 : 92, now);
+          osc.frequency.exponentialRampToValueAtTime(38, now + 0.065);
+
+          const thumpGain = this.ctx.createGain();
+          thumpGain.gain.setValueAtTime(peak * 0.7, now);
+          thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+          osc.connect(thumpGain);
+          thumpGain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.075);
+        }
+
+        // Trigger rich polyphonic locomotive horn with canyon echo
+        triggerHorn() {
+          if (!this.ctx) this.init();
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          if (!this.enabled) {
+            this.enabled = true;
+            this.masterGain.gain.setTargetAtTime(0.75, this.ctx.currentTime, 0.05);
+            updateAudioUI(true);
+          }
+
+          const now = this.ctx.currentTime;
+          // Classic locomotive 3-chime chord (D4, F#4, B4 / A4)
+          const freqs = [293.66, 369.99, 440.0];
+
+          freqs.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(f * 0.98, now);
+            osc.frequency.linearRampToValueAtTime(f, now + 0.12);
+            osc.frequency.setValueAtTime(f, now + 1.15);
+            osc.frequency.linearRampToValueAtTime(f * 0.96, now + 1.65);
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1150 - idx * 120, now);
+
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.11, now + 0.12);
+            gain.gain.setValueAtTime(0.10, now + 1.1);
+            gain.gain.exponentialRampToValueAtTime(0.0008, now + 1.75);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start(now);
+            osc.stop(now + 1.8);
+          });
+        }
+
+        update(dt, speedKmh, altitude) {
+          if (!this.enabled || !this.ctx) return;
+          const speedRatio = MathUtils.clamp(speedKmh / 140, 0, 1.2);
+          const now = this.ctx.currentTime;
+
+          // Modulate wind & rumble
+          const altFactor = MathUtils.clamp(altitude / 30, 0, 1);
+          this.windFilter.frequency.setTargetAtTime(200 + speedRatio * 380 + altFactor * 220, now, 0.1);
+          this.windGain.gain.setTargetAtTime(0.05 + speedRatio * 0.22 + altFactor * 0.12, now, 0.1);
+          this.rumbleGain.gain.setTargetAtTime(speedRatio * 0.14, now, 0.1);
+
+          // Distance traveled in meters
+          const metersPerSec = speedKmh / 3.6;
+          this.stepAccumulator += metersPerSec * dt;
+
+          // Rail joint every ~12.5 meters, with double-clack for bogie axles
+          const jointSpacing = 12.5;
+          if (this.stepAccumulator >= jointSpacing && speedKmh > 2) {
+            this.stepAccumulator %= jointSpacing;
+            this.triggerRailClack(speedRatio, false);
+            const axleDelay = MathUtils.clamp((2.2 / Math.max(metersPerSec, 2)) * 1000, 65, 320);
+            setTimeout(() => this.triggerRailClack(speedRatio, true), axleDelay);
+          }
+        }
+      }
+
+      const audioEngine = new TrainAudioEngine();
+
+      // ==========================================
+      // 4. PROCEDURAL TEXTURES (SKYSCRAPER WINDOWS, ETC.)
+      // ==========================================
+      function createCityWindowTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#111726';
+        ctx.fillRect(0, 0, 128, 256);
+
+        const cols = 8;
+        const rows = 24;
+        const padX = 3;
+        const padY = 3;
+        const w = (128 / cols) - padX * 2;
+        const h = (256 / rows) - padY * 2;
+
+        for (let r = 0; r < rows; r++) {
+          // Floor probability
+          const floorLit = Math.random() > 0.22;
+          for (let c = 0; c < cols; c++) {
+            if (floorLit && Math.random() > 0.32) {
+              const warm = Math.random();
+              if (warm > 0.35) {
+                ctx.fillStyle = '#fde68a'; // Warm office/apartment light
+              } else if (warm > 0.12) {
+                ctx.fillStyle = '#7dd3fc'; // Cool screen/LED light
+              } else {
+                ctx.fillStyle = '#f59e0b'; // Deep amber
+              }
+            } else {
+              ctx.fillStyle = '#1e293b';
+            }
+            ctx.fillRect(c * (128 / cols) + padX, r * (256 / rows) + padY, w, h);
+          }
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        return tex;
+      }
+
+      // ==========================================
+      // 5. THREE.JS SCENE, SKY & LIGHTING SETUP
+      // ==========================================
+      const container = document.getElementById('canvas-container');
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+      container.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(TIME_PRESETS[0].fogColor, TIME_PRESETS[0].fogDensity);
+
+      const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.4, 950);
+
+      // Sky Dome Shader (Smooth zenith-to-horizon gradient + procedural stars)
+      const skyGeo = new THREE.SphereGeometry(800, 32, 24);
+      const skyMat = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        uniforms: {
+          topColor: { value: TIME_PRESETS[0].skyTop.clone() },
+          bottomColor: { value: TIME_PRESETS[0].skyHorizon.clone() },
+          starOpacity: { value: TIME_PRESETS[0].starOpacity }
+        },
+        vertexShader: `
+          varying vec3 vWorldPos;
+          void main() {
+            vWorldPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 topColor;
+          uniform vec3 bottomColor;
+          uniform float starOpacity;
+          varying vec3 vWorldPos;
+
+          float hash(vec3 p) {
+            p = fract(p * 0.3183099 + .1);
+            p *= 17.0;
+            return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+          }
+
+          void main() {
+            vec3 dir = normalize(vWorldPos);
+            float h = clamp(dir.y * 1.35 + 0.12, 0.0, 1.0);
+            vec3 col = mix(bottomColor, topColor, pow(h, 0.65));
+
+            if (starOpacity > 0.01 && dir.y > 0.05) {
+              float s = hash(floor(dir * 380.0));
+              if (s > 0.9965) {
+                float twinkle = smoothstep(0.9965, 1.0, s) * starOpacity * smoothstep(0.05, 0.35, dir.y);
+                col += vec3(twinkle * 1.4);
+              }
+            }
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `
+      });
+      const skyDome = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(skyDome);
+
+      // Lighting
+      const hemiLight = new THREE.HemisphereLight(
+        TIME_PRESETS[0].hemiSky,
+        TIME_PRESETS[0].hemiGround,
+        TIME_PRESETS[0].hemiIntensity
+      );
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(TIME_PRESETS[0].sunColor, TIME_PRESETS[0].sunIntensity);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 10;
+      sunLight.shadow.camera.far = 360;
+      const d = 95;
+      sunLight.shadow.camera.left = -d;
+      sunLight.shadow.camera.right = d;
+      sunLight.shadow.camera.top = d;
+      sunLight.shadow.camera.bottom = -d;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+      scene.add(sunLight.target);
+
+      // Shared Emissive Materials that react to Time of Day
+      const cityWindowTex = createCityWindowTexture();
+      const sharedMaterials = {
+        railSteel: new THREE.MeshStandardMaterial({
+          color: 0xb8c2cc,
+          metalness: 0.85,
+          roughness: 0.22
+        }),
+        sleeperWood: new THREE.MeshStandardMaterial({
+          color: 0x3b281c,
+          roughness: 0.9
+        }),
+        ballastGravel: new THREE.MeshStandardMaterial({
+          color: 0x4b525c,
+          roughness: 0.95
+        }),
+        viaductStone: new THREE.MeshStandardMaterial({
+          color: 0x6e757c,
+          roughness: 0.88
+        }),
+        villageWall: new THREE.MeshStandardMaterial({
+          color: 0x9e7147,
+          roughness: 0.85
+        }),
+        villageRoof: new THREE.MeshStandardMaterial({
+          color: 0x7c2d23,
+          roughness: 0.78
+        }),
+        warmWindow: new THREE.MeshStandardMaterial({
+          color: 0xffedd5,
+          emissive: 0xf59e0b,
+          emissiveIntensity: 0.85,
+          roughness: 0.3
+        }),
+        citySkyscraper: new THREE.MeshStandardMaterial({
+          color: 0x64748b,
+          map: cityWindowTex,
+          emissive: 0xffd89b,
+          emissiveMap: cityWindowTex,
+          emissiveIntensity: 0.75,
+          metalness: 0.5,
+          roughness: 0.3
+        }),
+        neonAccent: new THREE.MeshBasicMaterial({
+          color: 0x38bdf8
+        }),
+        neonPink: new THREE.MeshBasicMaterial({
+          color: 0xf43f5e
+        }),
+        pineFoliage: new THREE.MeshStandardMaterial({
+          color: 0x1e4628,
+          roughness: 0.85,
+          flatShading: true
+        }),
+        oakFoliage: new THREE.MeshStandardMaterial({
+          color: 0x36692f,
+          roughness: 0.82,
+          flatShading: true
+        }),
+        treeTrunk: new THREE.MeshStandardMaterial({
+          color: 0x4a3222,
+          roughness: 0.92
+        }),
+        snowCap: new THREE.MeshStandardMaterial({
+          color: 0xf1f5f9,
+          roughness: 0.6,
+          flatShading: true
+        }),
+        mountainRock: new THREE.MeshStandardMaterial({
+          color: 0x475569,
+          roughness: 0.88,
+          flatShading: true
+        })
+      };
+
+      // ==========================================
+      // 6. INFINITE C1 CATMULL-ROM SPLINE & CHUNK STREAM
+      // ==========================================
+      const CHUNK_LENGTH = 46.0; // meters per spline segment
+      const CHUNKS_BEHIND = 5;
+      const CHUNKS_AHEAD = 18;
+
+      class InfiniteSplineWorld {
+        constructor() {
+          this.controlPoints = new Map(); // index k -> { pos: Vector3, biomeId: number }
+          this.chunks = new Map();        // index k -> THREE.Group
+          this.forcedBiome = 'auto';      // 'auto' or 0, 1, 2, 3
+          this.maxPointIndex = -10;
+          this.worldGroup = new THREE.Group();
+          scene.add(this.worldGroup);
+
+          // Seed initial control points from k = -8 to k = 25
+          for (let k = -8; k <= 26; k++) {
+            this.ensureControlPoint(k);
+          }
+        }
+
+        getBiomeForIndex(k) {
+          if (this.forcedBiome !== 'auto') {
+            return parseInt(this.forcedBiome, 10);
+          }
+          // Cycle smoothly every 12 segments (~550m per biome)
+          const cycle = Math.floor(Math.max(0, k + 4) / 12) % 4;
+          return cycle;
+        }
+
+        ensureControlPoint(k) {
+          if (this.controlPoints.has(k)) {
+            return this.controlPoints.get(k);
+          }
+          const biomeId = this.getBiomeForIndex(k);
+          const biome = BIOMES[biomeId];
+
+          // Blend parameters with previous control point for smooth elevation/curve transitions
+          const prev = this.controlPoints.get(k - 1);
+          const prevBiome = prev ? BIOMES[prev.biomeId] : biome;
+
+          const z = -k * CHUNK_LENGTH;
+          // Winding serpentine X path using multi-frequency sine waves
+          const waveX = Math.sin(k * 0.23) * biome.curveAmp + Math.cos(k * 0.11) * (biome.curveAmp * 0.75);
+          const targetY = biome.baseElevation + Math.sin(k * 0.29) * biome.elevAmp + Math.cos(k * 0.17) * (biome.elevAmp * 0.4);
+
+          const x = prev ? MathUtils.lerp(prev.pos.x, waveX, 0.55) : waveX;
+          const y = prev ? MathUtils.lerp(prev.pos.y, targetY, 0.45) : targetY;
+
+          const data = {
+            pos: new THREE.Vector3(x, y, z),
+            biomeId
+          };
+          this.controlPoints.set(k, data);
+          if (k > this.maxPointIndex) this.maxPointIndex = k;
+          return data;
+        }
+
+        // Evaluate C1 Catmull-Rom position & tangent at continuous segment coordinate `s`
+        // where integer part `k = Math.floor(s)` and `t = s - k` in [0, 1]
+        getPointAndFrame(s) {
+          const k = Math.floor(s);
+          const t = s - k;
+
+          const p0 = this.ensureControlPoint(k - 1).pos;
+          const p1 = this.ensureControlPoint(k).pos;
+          const p2 = this.ensureControlPoint(k + 1).pos;
+          const p3 = this.ensureControlPoint(k + 2).pos;
+
+          const t2 = t * t;
+          const t3 = t2 * t;
+
+          // Catmull-Rom Position
+          const pos = new THREE.Vector3();
+          pos.x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+          pos.y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+          pos.z = 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
+
+          // First derivative (Tangent)
+          const tangent = new THREE.Vector3();
+          tangent.x = 0.5 * ((-p0.x + p2.x) + (4 * p0.x - 10 * p1.x + 8 * p2.x - 2 * p3.x) * t + (-3 * p0.x + 9 * p1.x - 9 * p2.x + 3 * p3.x) * t2);
+          tangent.y = 0.5 * ((-p0.y + p2.y) + (4 * p0.y - 10 * p1.y + 8 * p2.y - 2 * p3.y) * t + (-3 * p0.y + 9 * p1.y - 9 * p2.y + 3 * p3.y) * t2);
+          tangent.z = 0.5 * ((-p0.z + p2.z) + (4 * p0.z - 10 * p1.z + 8 * p2.z - 2 * p3.z) * t + (-3 * p0.z + 9 * p1.z - 9 * p2.z + 3 * p3.z) * t2);
+          tangent.normalize();
+
+          // Second derivative lateral component for realistic banking on curves
+          const d2x = (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) + (-3 * p0.x + 9 * p1.x - 9 * p2.x + 3 * p3.x) * t;
+          const bankAngle = MathUtils.clamp(-d2x * 0.0028, -0.14, 0.14);
+
+          const worldUp = new THREE.Vector3(0, 1, 0);
+          const right = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+          const normal = new THREE.Vector3().crossVectors(right, tangent).normalize();
+
+          // Apply slight bank roll around tangent
+          if (Math.abs(bankAngle) > 0.001) {
+            right.applyAxisAngle(tangent, bankAngle);
+            normal.applyAxisAngle(tangent, bankAngle);
+          }
+
+          return {
+            pos,
+            tangent,
+            right,
+            normal,
+            bankAngle,
+            biomeId: this.ensureControlPoint(k).biomeId
+          };
+        }
+
+        // Compute terrain height at world (x, z) given closest track frame
+        computeTerrainHeight(wx, wz, trackFrame, lateralDist, biomeId) {
+          const absLat = Math.abs(lateralDist);
+          const n1 = MathUtils.fbm2D(wx * 0.015, wz * 0.015, 3);
+          const n2 = MathUtils.fbm2D(wx * 0.045 + 17.3, wz * 0.045, 2);
+
+          // Under the track corridor
+          if (absLat < 3.6) {
+            if (biomeId === 3) {
+              // Deep mountain gorge under stone viaduct!
+              return trackFrame.pos.y - 22.0 + n1 * 4.0;
+            }
+            // Occasional river/valley crossing in forest/village
+            const valleyWave = Math.sin(wz * 0.018);
+            if (valleyWave > 0.68 && biomeId !== 2) {
+              return trackFrame.pos.y - 11.0 * ((valleyWave - 0.68) / 0.32);
+            }
+            return trackFrame.pos.y - 0.55;
+          }
+
+          // Smooth blend factor away from the track embankment
+          const blend = MathUtils.smoothstep(3.6, 18.0, absLat);
+
+          if (biomeId === 0) {
+            // Forest: rolling green hills
+            const hill = trackFrame.pos.y - 0.8 + (n1 * 14.0 + n2 * 4.0) * blend + Math.pow(absLat * 0.08, 1.35);
+            return hill;
+          } else if (biomeId === 1) {
+            // Village: gentle pastoral meadows
+            return trackFrame.pos.y - 0.6 + (n1 * 5.5 + n2 * 1.5) * blend;
+          } else if (biomeId === 2) {
+            // City: flat urban avenues & plazas slightly below track embankment
+            return trackFrame.pos.y - 0.75 + (n2 * 0.4) * blend;
+          } else {
+            // Mountain Serpentine: dramatic high cliff on one side, deep canyon & jagged peaks on the other
+            const sideSign = lateralDist > 0 ? 1 : -1;
+            if (sideSign > 0) {
+              // Towering mountain wall rising up
+              return (trackFrame.pos.y - 12.0) * (1 - blend) + (trackFrame.pos.y + 8.0 + absLat * 0.58 + Math.abs(n1) * 26.0 + n2 * 7.0) * blend;
+            } else {
+              // Deep canyon floor rising to distant snowy peaks far out
+              const canyonProfile = absLat < 42
+                ? trackFrame.pos.y - 24.0 + n1 * 6.0
+                : trackFrame.pos.y - 24.0 + (absLat - 42) * 0.85 + Math.abs(n1) * 28.0;
+              return MathUtils.lerp(trackFrame.pos.y - 20.0, canyonProfile, blend);
+            }
+          }
+        }
+
+        // Build complete 3D chunk for spline segment `k`
+        buildChunk(k) {
+          if (this.chunks.has(k)) return;
+
+          // Ensure control points exist
+          this.ensureControlPoint(k - 1);
+          const cp = this.ensureControlPoint(k);
+          this.ensureControlPoint(k + 1);
+          this.ensureControlPoint(k + 2);
+
+          const biomeId = cp.biomeId;
+          const biome = BIOMES[biomeId];
+          const group = new THREE.Group();
+
+          // 1. SAMPLE SPLINE FRAMES ALONG SEGMENT k (t from 0 to 1)
+          const steps = 16;
+          const frames = [];
+          for (let i = 0; i <= steps; i++) {
+            frames.push(this.getPointAndFrame(k + i / steps));
+          }
+
+          // 2. BUILD TERRAIN RIBBON MESH (Vertex-colored procedural landscape)
+          const latSamples = [-125, -88, -56, -32, -16, -7.5, -3.4, 0, 3.4, 7.5, 16, 32, 56, 88, 125];
+          const cols = latSamples.length;
+          const terrainPositions = [];
+          const terrainColors = [];
+          const terrainIndices = [];
+
+          const cTemp = new THREE.Color();
+          const snowColor = new THREE.Color(0xf1f5f9);
+          const cliffColor = new THREE.Color(0x3a424d);
+          const ballastSideColor = new THREE.Color(0x3f444c);
+
+          for (let i = 0; i <= steps; i++) {
+            const f = frames[i];
+            for (let j = 0; j < cols; j++) {
+              const lat = latSamples[j];
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              terrainPositions.push(wx, wy, wz);
+
+              // Vertex Color Selection
+              const nVal = MathUtils.noise2D(wx * 0.04, wz * 0.04);
+              cTemp.lerpColors(biome.groundBase, biome.groundAlt, nVal);
+
+              if (Math.abs(lat) <= 4.0 && wy > f.pos.y - 2.0) {
+                cTemp.copy(ballastSideColor);
+              } else if (biomeId === 3) {
+                if (wy > f.pos.y + 19.0) {
+                  // Snow-capped mountain peaks
+                  cTemp.lerp(snowColor, MathUtils.smoothstep(f.pos.y + 18.0, f.pos.y + 28.0, wy));
+                } else if (wy < f.pos.y - 6.0) {
+                  cTemp.copy(cliffColor).multiplyScalar(0.75 + nVal * 0.3);
+                }
+              }
+              terrainColors.push(cTemp.r, cTemp.g, cTemp.b);
+            }
+          }
+
+          for (let i = 0; i < steps; i++) {
+            for (let j = 0; j < cols - 1; j++) {
+              const a = i * cols + j;
+              const b = (i + 1) * cols + j;
+              const c = (i + 1) * cols + (j + 1);
+              const d = i * cols + (j + 1);
+              terrainIndices.push(a, d, b);
+              terrainIndices.push(b, d, c);
+            }
+          }
+
+          const terrainGeo = new THREE.BufferGeometry();
+          terrainGeo.setAttribute('position', new THREE.Float32BufferAttribute(terrainPositions, 3));
+          terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(terrainColors, 3));
+          terrainGeo.setIndex(terrainIndices);
+          terrainGeo.computeVertexNormals();
+
+          const terrainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            roughness: 0.92,
+            metalness: 0.04,
+            flatShading: true
+          });
+          const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+          terrainMesh.receiveShadow = true;
+          group.add(terrainMesh);
+
+          // 3. BUILD GRAVEL BALLAST DECK & STEEL RAILS
+          this.buildTrackGeometry(group, frames, biomeId);
+
+          // 4. POPULATE BIOME SCENERY PROPS
+          this.populateBiomeProps(group, k, frames, biomeId);
+
+          this.worldGroup.add(group);
+          this.chunks.set(k, group);
+        }
+
+        buildTrackGeometry(group, frames, biomeId) {
+          const steps = frames.length - 1;
+
+          // Helper to extrude a profile ribbon along `frames`
+          const buildRibbon = (profilePoints, material, receiveShadow = true) => {
+            const pCount = profilePoints.length;
+            const positions = [];
+            const indices = [];
+
+            for (let i = 0; i <= steps; i++) {
+              const f = frames[i];
+              for (let p = 0; p < pCount; p++) {
+                const pt = profilePoints[p];
+                const vx = f.pos.x + f.right.x * pt[0] + f.normal.x * pt[1];
+                const vy = f.pos.y + f.right.y * pt[0] + f.normal.y * pt[1];
+                const vz = f.pos.z + f.right.z * pt[0] + f.normal.z * pt[1];
+                positions.push(vx, vy, vz);
+              }
+            }
+            for (let i = 0; i < steps; i++) {
+              for (let p = 0; p < pCount - 1; p++) {
+                const a = i * pCount + p;
+                const b = (i + 1) * pCount + p;
+                const c = (i + 1) * pCount + (p + 1);
+                const d = i * pCount + (p + 1);
+                indices.push(a, d, b, b, d, c);
+              }
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.setIndex(indices);
+            geo.computeVertexNormals();
+            const mesh = new THREE.Mesh(geo, material);
+            mesh.receiveShadow = receiveShadow;
+            return mesh;
+          };
+
+          // Ballast bed profile
+          const ballastProfile = [
+            [-2.4, -0.55],
+            [-1.65, 0.0],
+            [1.65, 0.0],
+            [2.4, -0.55]
+          ];
+          group.add(buildRibbon(ballastProfile, sharedMaterials.ballastGravel, true));
+
+          // Left & Right Steel Rails
+          const gauge = 0.78;
+          const railW = 0.09;
+          const railH = 0.16;
+          [-gauge, gauge].forEach((offset) => {
+            const railProfile = [
+              [offset - railW, 0.02],
+              [offset - railW * 0.7, railH],
+              [offset + railW * 0.7, railH],
+              [offset + railW, 0.02]
+            ];
+            group.add(buildRibbon(railProfile, sharedMaterials.railSteel, false));
+          });
+
+          // Wooden Sleepers (Шпалы) via InstancedMesh
+          const sleeperCount = 26;
+          const sleeperGeo = new THREE.BoxGeometry(2.55, 0.11, 0.28);
+          const sleeperInst = new THREE.InstancedMesh(sleeperGeo, sharedMaterials.sleeperWood, sleeperCount);
+          sleeperInst.receiveShadow = true;
+
+          const dummy = new THREE.Object3D();
+          const rotMat = new THREE.Matrix4();
+          for (let i = 0; i < sleeperCount; i++) {
+            const idxF = (i / sleeperCount) * steps;
+            const i0 = Math.floor(idxF);
+            const f = frames[Math.min(i0, steps)];
+            const fNext = frames[Math.min(i0 + 1, steps)];
+            const frac = idxF - i0;
+
+            dummy.position.lerpVectors(f.pos, fNext.pos, frac);
+            dummy.position.addScaledVector(f.normal, 0.02);
+            rotMat.makeBasis(f.right, f.normal, f.tangent.clone().negate());
+            dummy.quaternion.setFromRotationMatrix(rotMat);
+            dummy.updateMatrix();
+            sleeperInst.setMatrixAt(i, dummy.matrix);
+          }
+          group.add(sleeperInst);
+
+          // Stone Viaduct Pillars & Bridge Deck when elevated over mountain gorges or valleys
+          for (let i = 2; i < steps; i += 4) {
+            const f = frames[i];
+            const groundY = this.computeTerrainHeight(f.pos.x, f.pos.z, f, 0, biomeId);
+            const drop = f.pos.y - groundY;
+            if (drop > 2.2) {
+              // Stone Bridge Deck Segment & Viaduct Pier
+              const pierH = drop + 2.0;
+              const pierGeo = new THREE.BoxGeometry(3.4, pierH, 2.4);
+              const pier = new THREE.Mesh(pierGeo, sharedMaterials.viaductStone);
+              pier.position.set(f.pos.x, f.pos.y - pierH * 0.5 - 0.3, f.pos.z);
+              const yaw = Math.atan2(f.tangent.x, f.tangent.z);
+              pier.rotation.y = yaw;
+              pier.castShadow = true;
+              pier.receiveShadow = true;
+              group.add(pier);
+
+              // Stone parapet walls along the viaduct
+              const deckGeo = new THREE.BoxGeometry(5.0, 0.85, CHUNK_LENGTH * 0.28);
+              const deck = new THREE.Mesh(deckGeo, sharedMaterials.viaductStone);
+              deck.position.set(f.pos.x, f.pos.y - 0.45, f.pos.z);
+              deck.rotation.y = yaw;
+              group.add(deck);
+            }
+          }
+        }
+
+        populateBiomeProps(group, k, frames, biomeId) {
+          const steps = frames.length - 1;
+
+          // Seeded pseudo-random helper per chunk
+          let seed = (k * 9301 + 49297) % 233280;
+          const rand = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+          };
+
+          if (biomeId === 0) {
+            // ==========================================
+            // BIOME 0: FOREST (Густой лес)
+            // ==========================================
+            const treeCount = 38;
+            for (let i = 0; i < treeCount; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = rand() > 0.5 ? 1 : -1;
+              const lat = side * (7.0 + rand() * 78.0);
+              const wx = f.pos.x + f.right.x * lat + (rand() - 0.5) * 4.0;
+              const wz = f.pos.z + f.right.z * lat + (rand() - 0.5) * 4.0;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const scale = 0.85 + rand() * 1.15;
+              const tree = new THREE.Group();
+              tree.position.set(wx, wy, wz);
+              tree.scale.setScalar(scale);
+
+              const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.35, 2.2, 6), sharedMaterials.treeTrunk);
+              trunk.position.y = 1.1;
+              trunk.castShadow = true;
+              tree.add(trunk);
+
+              if (rand() > 0.28) {
+                // Layered Pine Tree
+                const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.85, 3.6, 7), sharedMaterials.pineFoliage);
+                c1.position.y = 3.1;
+                c1.castShadow = true;
+                tree.add(c1);
+
+                const c2 = new THREE.Mesh(new THREE.ConeGeometry(1.35, 3.0, 7), sharedMaterials.pineFoliage);
+                c2.position.y = 5.0;
+                c2.castShadow = true;
+                tree.add(c2);
+              } else {
+                // Lush Oak Tree
+                const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.1, 1), sharedMaterials.oakFoliage);
+                crown.position.y = 3.6;
+                crown.castShadow = true;
+                tree.add(crown);
+              }
+              group.add(tree);
+            }
+
+            // Mossy Boulders
+            for (let i = 0; i < 10; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = rand() > 0.5 ? 1 : -1;
+              const lat = side * (6.0 + rand() * 50.0);
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const rock = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(0.9 + rand() * 1.6, 0),
+                sharedMaterials.mountainRock
+              );
+              rock.position.set(wx, wy + 0.3, wz);
+              rock.rotation.set(rand() * 3, rand() * 3, 0);
+              rock.castShadow = true;
+              group.add(rock);
+            }
+          } else if (biomeId === 1) {
+            // ==========================================
+            // BIOME 1: VILLAGE (Деревня)
+            // ==========================================
+            const houseCount = 7;
+            for (let i = 0; i < houseCount; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = i % 2 === 0 ? 1 : -1;
+              const lat = side * (11.0 + rand() * 34.0);
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const house = new THREE.Group();
+              house.position.set(wx, wy, wz);
+              house.rotation.y = Math.atan2(f.tangent.x, f.tangent.z) + (rand() - 0.5) * 0.4;
+
+              const w = 4.2 + rand() * 2.0;
+              const h = 2.8 + rand() * 0.8;
+              const d = 4.8 + rand() * 2.0;
+
+              // Cabin Body
+              const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), sharedMaterials.villageWall);
+              walls.position.y = h * 0.5;
+              walls.castShadow = true;
+              walls.receiveShadow = true;
+              house.add(walls);
+
+              // Pitched Roof
+              const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.82, 2.2, 4), sharedMaterials.villageRoof);
+              roof.position.y = h + 1.1;
+              roof.rotation.y = Math.PI * 0.25;
+              roof.castShadow = true;
+              house.add(roof);
+
+              // Glowing Windows on both sides
+              const winGeo = new THREE.BoxGeometry(w + 0.12, 0.75, 0.85);
+              const win1 = new THREE.Mesh(winGeo, sharedMaterials.warmWindow);
+              win1.position.set(0, h * 0.55, d * 0.22);
+              house.add(win1);
+
+              const win2 = new THREE.Mesh(winGeo, sharedMaterials.warmWindow);
+              win2.position.set(0, h * 0.55, -d * 0.22);
+              house.add(win2);
+
+              group.add(house);
+            }
+
+            // Trackside Warm Lanterns & Occasional Trees
+            for (let i = 2; i < steps; i += 5) {
+              const f = frames[i];
+              const side = (i % 2 === 0) ? 1 : -1;
+              const lat = side * 4.4;
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 4.2, 6), sharedMaterials.sleeperWood);
+              pole.position.set(wx, wy + 2.1, wz);
+              group.add(pole);
+
+              const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 8), sharedMaterials.warmWindow);
+              bulb.position.set(wx, wy + 4.2, wz);
+              group.add(bulb);
+            }
+
+            // Scatter a few orchard trees
+            for (let i = 0; i < 10; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = rand() > 0.5 ? 1 : -1;
+              const lat = side * (16.0 + rand() * 55.0);
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const tree = new THREE.Group();
+              tree.position.set(wx, wy, wz);
+              const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.26, 1.8, 6), sharedMaterials.treeTrunk);
+              trunk.position.y = 0.9;
+              tree.add(trunk);
+              const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.7, 1), sharedMaterials.oakFoliage);
+              crown.position.y = 2.7;
+              crown.castShadow = true;
+              tree.add(crown);
+              group.add(tree);
+            }
+          } else if (biomeId === 2) {
+            // ==========================================
+            // BIOME 2: CITY (Мегаполис)
+            // ==========================================
+            const buildingCount = 14;
+            for (let i = 0; i < buildingCount; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = i % 2 === 0 ? 1 : -1;
+              const lat = side * (12.0 + rand() * 68.0);
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const w = 7.5 + rand() * 9.0;
+              const d = 7.5 + rand() * 9.0;
+              const h = 18.0 + rand() * 52.0;
+
+              const tower = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), sharedMaterials.citySkyscraper);
+              tower.position.set(wx, wy + h * 0.5, wz);
+              tower.rotation.y = Math.atan2(f.tangent.x, f.tangent.z);
+              tower.castShadow = true;
+              tower.receiveShadow = true;
+              group.add(tower);
+
+              // Rooftop Neon Strip / Aviation Beacon
+              if (rand() > 0.35) {
+                const neonMat = rand() > 0.5 ? sharedMaterials.neonAccent : sharedMaterials.neonPink;
+                const crown = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.45, d + 0.3), neonMat);
+                crown.position.set(wx, wy + h + 0.25, wz);
+                crown.rotation.y = tower.rotation.y;
+                group.add(crown);
+              }
+            }
+
+            // Modern Highway Overpass Bridge every 3rd city chunk
+            if (k % 3 === 0) {
+              const f = frames[8];
+              const bridgeGroup = new THREE.Group();
+              bridgeGroup.position.copy(f.pos);
+              bridgeGroup.rotation.y = Math.atan2(f.tangent.x, f.tangent.z);
+
+              const span = new THREE.Mesh(new THREE.BoxGeometry(90, 1.4, 6.5), sharedMaterials.viaductStone);
+              span.position.y = 9.2;
+              span.castShadow = true;
+              bridgeGroup.add(span);
+
+              const neonStrip = new THREE.Mesh(new THREE.BoxGeometry(90, 0.22, 6.7), sharedMaterials.neonAccent);
+              neonStrip.position.y = 8.5;
+              bridgeGroup.add(neonStrip);
+
+              [-18, 18].forEach((px) => {
+                const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 12, 10), sharedMaterials.viaductStone);
+                pillar.position.set(px, 3.2, 0);
+                bridgeGroup.add(pillar);
+              });
+
+              group.add(bridgeGroup);
+            }
+          } else {
+            // ==========================================
+            // BIOME 3: MOUNTAIN SERPENTINE (Горный серпантин)
+            // ==========================================
+            const peakCount = 12;
+            for (let i = 0; i < peakCount; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const side = i % 2 === 0 ? 1 : -1;
+              const lat = side > 0 ? (22.0 + rand() * 75.0) : -(38.0 + rand() * 75.0);
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const radius = 9.0 + rand() * 14.0;
+              const height = 24.0 + rand() * 38.0;
+
+              const spire = new THREE.Group();
+              spire.position.set(wx, wy - 4.0, wz);
+              spire.rotation.y = rand() * Math.PI;
+
+              const rockBody = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 6), sharedMaterials.mountainRock);
+              rockBody.position.y = height * 0.5;
+              rockBody.castShadow = true;
+              spire.add(rockBody);
+
+              // Snow Cap on top of the mountain spire
+              const capH = height * 0.38;
+              const capR = radius * 0.39;
+              const snowCap = new THREE.Mesh(new THREE.ConeGeometry(capR, capH, 6), sharedMaterials.snowCap);
+              snowCap.position.y = height - capH * 0.48;
+              spire.add(snowCap);
+
+              group.add(spire);
+            }
+
+            // Alpine Pine Trees clinging to cliffs
+            for (let i = 0; i < 14; i++) {
+              const f = frames[Math.floor(rand() * steps)];
+              const lat = 10.0 + rand() * 40.0;
+              const wx = f.pos.x + f.right.x * lat;
+              const wz = f.pos.z + f.right.z * lat;
+              const wy = this.computeTerrainHeight(wx, wz, f, lat, biomeId);
+
+              const pine = new THREE.Mesh(new THREE.ConeGeometry(1.5, 4.4, 6), sharedMaterials.pineFoliage);
+              pine.position.set(wx, wy + 2.0, wz);
+              pine.castShadow = true;
+              group.add(pine);
+            }
+          }
+        }
+
+        // Stream chunks ahead and dispose old chunks behind the train
+        updateStream(currentTrainS) {
+          const centerChunk = Math.floor(currentTrainS);
+
+          // Build upcoming chunks
+          for (let k = centerChunk - CHUNKS_BEHIND; k <= centerChunk + CHUNKS_AHEAD; k++) {
+            if (!this.chunks.has(k)) {
+              this.buildChunk(k);
+            }
+          }
+
+          // Dispose old chunks behind the train
+          for (const [k, chunkGroup] of this.chunks.entries()) {
+            if (k < centerChunk - CHUNKS_BEHIND - 2 || k > centerChunk + CHUNKS_AHEAD + 4) {
+              this.disposeGroup(chunkGroup);
+              this.worldGroup.remove(chunkGroup);
+              this.chunks.delete(k);
+            }
+          }
+
+          // Prune very old control points
+          for (const k of this.controlPoints.keys()) {
+            if (k < centerChunk - CHUNKS_BEHIND - 8) {
+              this.controlPoints.delete(k);
+            }
+          }
+        }
+
+        // Regenerate forward chunks immediately when user manually switches biome
+        setBiomeMode(mode, currentTrainS) {
+          this.forcedBiome = mode;
+          const centerChunk = Math.floor(currentTrainS);
+
+          // Clear control points & chunks ahead of train + 2 chunks so transition happens right in front
+          for (const [k, chunkGroup] of this.chunks.entries()) {
+            if (k > centerChunk + 2) {
+              this.disposeGroup(chunkGroup);
+              this.worldGroup.remove(chunkGroup);
+              this.chunks.delete(k);
+            }
+          }
+          for (const k of this.controlPoints.keys()) {
+            if (k > centerChunk + 2) {
+              this.controlPoints.delete(k);
+            }
+          }
+          this.updateStream(currentTrainS);
+        }
+
+        disposeGroup(group) {
+          group.traverse((obj) => {
+            if (obj.geometry) {
+              obj.geometry.dispose();
+            }
+            // Dispose only unique terrain materials, keep shared materials intact
+            if (obj.material && obj.material.vertexColors) {
+              obj.material.dispose();
+            }
+          });
+        }
+      }
+
+      const world = new InfiniteSplineWorld();
+
+      // ==========================================
+      // 7. ARTICULATED TRAIN (LOCOMOTIVE + 4 CARRIAGES + STEAM)
+      // ==========================================
+      class ArticulatedTrain {
+        constructor() {
+          this.root = new THREE.Group();
+          scene.add(this.root);
+
+          this.cars = [];
+          this.wheels = [];
+          this.headlight = null;
+          this.headlightCone = null;
+          this.smokeParticles = [];
+
+          this.bodyMat = new THREE.MeshStandardMaterial({
+            color: 0x881b1b, // Rich Crimson Express Livery
+            metalness: 0.45,
+            roughness: 0.32
+          });
+          this.locoDarkMat = new THREE.MeshStandardMaterial({
+            color: 0x181c24,
+            metalness: 0.65,
+            roughness: 0.35
+          });
+          this.brassMat = new THREE.MeshStandardMaterial({
+            color: 0xf59e0b,
+            metalness: 0.85,
+            roughness: 0.2
+          });
+          this.roofMat = new THREE.MeshStandardMaterial({
+            color: 0x272c35,
+            metalness: 0.4,
+            roughness: 0.55
+          });
+
+          this.buildLocomotive();
+          for (let i = 1; i <= 4; i++) {
+            this.buildCarriage(i);
+          }
+          this.initSmokeSystem();
+        }
+
+        createBogieWheelSet(parent, zOffset, radius = 0.42) {
+          const axleGroup = new THREE.Group();
+          axleGroup.position.set(0, radius, zOffset);
+
+          const wheelGeo = new THREE.CylinderGeometry(radius, radius, 0.14, 16);
+          wheelGeo.rotateZ(Math.PI * 0.5);
+
+          [-0.78, 0.78].forEach((xPos) => {
+            const w = new THREE.Mesh(wheelGeo, sharedMaterials.railSteel);
+            w.position.x = xPos;
+            axleGroup.add(w);
+          });
+
+          // Spoke bar so wheel rotation is visibly obvious in close-up camera
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.12, 0.12), this.brassMat);
+          axleGroup.add(bar);
+
+          parent.add(axleGroup);
+          this.wheels.push(axleGroup);
+        }
+
+        buildLocomotive() {
+          const loco = new THREE.Group();
+
+          // Heavy Underframe Chassis
+          const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.55, 9.2), this.locoDarkMat);
+          chassis.position.y = 0.85;
+          chassis.castShadow = true;
+          loco.add(chassis);
+
+          // Crimson & Brass Trim Stripe
+          const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.14, 9.25), this.brassMat);
+          stripe.position.y = 1.08;
+          loco.add(stripe);
+
+          // Main Boiler Cylinder
+          const boilerGeo = new THREE.CylinderGeometry(1.08, 1.08, 5.6, 20);
+          boilerGeo.rotateX(Math.PI * 0.5);
+          const boiler = new THREE.Mesh(boilerGeo, this.locoDarkMat);
+          boiler.position.set(0, 2.05, -1.1);
+          boiler.castShadow = true;
+          loco.add(boiler);
+
+          // Brass Boiler Bands
+          [-3.2, -1.8, -0.4].forEach((bz) => {
+            const bandGeo = new THREE.CylinderGeometry(1.11, 1.11, 0.12, 20);
+            bandGeo.rotateX(Math.PI * 0.5);
+            const band = new THREE.Mesh(bandGeo, this.brassMat);
+            band.position.set(0, 2.05, bz);
+            loco.add(band);
+          });
+
+          // Smokestack
+          const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 1.15, 14), this.locoDarkMat);
+          stack.position.set(0, 3.15, -2.95);
+          loco.add(stack);
+
+          // Engineer Cabin
+          const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.35, 3.1), this.bodyMat);
+          cab.position.set(0, 2.25, 2.65);
+          cab.castShadow = true;
+          loco.add(cab);
+
+          const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(2.78, 0.22, 3.4), this.roofMat);
+          cabRoof.position.set(0, 3.5, 2.65);
+          loco.add(cabRoof);
+
+          // Glowing Cabin Windows
+          const cabWin = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.85, 1.65), sharedMaterials.warmWindow);
+          cabWin.position.set(0, 2.55, 2.65);
+          loco.add(cabWin);
+
+          // Cowcatcher (Путеочиститель)
+          const wedgeGeo = new THREE.ConeGeometry(1.45, 1.5, 4);
+          wedgeGeo.rotateX(-Math.PI * 0.5);
+          wedgeGeo.rotateZ(Math.PI * 0.25);
+          const cowcatcher = new THREE.Mesh(wedgeGeo, this.bodyMat);
+          cowcatcher.position.set(0, 0.55, -4.75);
+          loco.add(cowcatcher);
+
+          // Front Headlamp Housing
+          const lampBox = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.4, 16), this.brassMat);
+          lampBox.rotation.x = Math.PI * 0.5;
+          lampBox.position.set(0, 2.25, -4.0);
+          loco.add(lampBox);
+
+          // Glowing Headlamp Bulb & Halo
+          const lens = new THREE.Mesh(
+            new THREE.SphereGeometry(0.26, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xfffbeb })
+          );
+          lens.scale.set(1.0, 1.0, 0.45);
+          lens.position.set(0, 2.25, -4.2);
+          loco.add(lens);
+
+          // Dynamic Headlight SpotLight casting forward (-Z in loco space) onto tracks/trees ahead
+          this.headlight = new THREE.SpotLight(0xfff4d6, 2.6, 145, Math.PI / 4.0, 0.55, 1.1);
+          this.headlight.position.set(0, 2.25, -4.25);
+          this.headlight.target.position.set(0, -0.6, -46.0);
+          loco.add(this.headlight);
+          loco.add(this.headlight.target);
+
+          // Volumetric Light Beam Frustum (narrow tip at headlamp lens, wide base projecting forward along -Z)
+          const beamLength = 40.0;
+          const coneGeo = new THREE.CylinderGeometry(0.26, 6.8, beamLength, 24, 1, true);
+          coneGeo.translate(0, -beamLength * 0.5, 0);
+          // Positive Math.PI / 2 rotates -Y into -Z (forward ahead of cowcatcher), -0.05 tilts slightly down onto rails
+          coneGeo.rotateX(Math.PI * 0.5 - 0.05);
+          const coneMat = new THREE.MeshBasicMaterial({
+            color: 0xfffaeb,
+            transparent: true,
+            opacity: 0.14,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+          });
+          this.headlightCone = new THREE.Mesh(coneGeo, coneMat);
+          this.headlightCone.position.set(0, 2.25, -4.22);
+          loco.add(this.headlightCone);
+
+          // Wheels
+          [-3.2, -1.6, 0.1, 2.1, 3.5].forEach((zOff, idx) => {
+            this.createBogieWheelSet(loco, zOff, idx === 1 || idx === 2 ? 0.55 : 0.42);
+          });
+
+          this.root.add(loco);
+          this.cars.push({ mesh: loco, length: 9.6, offsetS: 0 });
+        }
+
+        buildCarriage(index) {
+          const car = new THREE.Group();
+
+          // Underframe
+          const frame = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.45, 8.6), this.locoDarkMat);
+          frame.position.y = 0.82;
+          frame.castShadow = true;
+          car.add(frame);
+
+          // Carriage Body (Crimson + Cream Window Band)
+          const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.15, 8.4), this.bodyMat);
+          body.position.y = 2.05;
+          body.castShadow = true;
+          body.receiveShadow = true;
+          car.add(body);
+
+          // Gold Pinstripe
+          const goldBand = new THREE.Mesh(new THREE.BoxGeometry(2.64, 0.1, 8.44), this.brassMat);
+          goldBand.position.y = 1.65;
+          car.add(goldBand);
+
+          // Arched Roof
+          const roof = new THREE.Mesh(new THREE.BoxGeometry(2.66, 0.34, 8.55), this.roofMat);
+          roof.position.y = 3.25;
+          car.add(roof);
+
+          // Glowing Passenger Windows (6 per side)
+          for (let w = -3.1; w <= 3.1; w += 1.24) {
+            const winPane = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.72, 0.86), sharedMaterials.warmWindow);
+            winPane.position.set(0, 2.28, w);
+            car.add(winPane);
+          }
+
+          // Flexible Gangway Connector at front
+          const connector = new THREE.Mesh(new THREE.BoxGeometry(1.55, 1.95, 0.85), this.locoDarkMat);
+          connector.position.set(0, 1.95, -4.5);
+          car.add(connector);
+
+          // Red Tail Lamps on the final carriage
+          if (index === 4) {
+            const tailMat = new THREE.MeshBasicMaterial({ color: 0xff1e1e });
+            [-0.85, 0.85].forEach((tx) => {
+              const tailLamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), tailMat);
+              tailLamp.position.set(tx, 1.45, 4.25);
+              car.add(tailLamp);
+            });
+          }
+
+          // Bogie Wheels
+          [-3.0, -1.9, 1.9, 3.0].forEach((zOff) => {
+            this.createBogieWheelSet(car, zOff, 0.4);
+          });
+
+          this.root.add(car);
+          this.cars.push({
+            mesh: car,
+            length: 9.2,
+            offsetS: index * (9.55 / CHUNK_LENGTH)
+          });
+        }
+
+        initSmokeSystem() {
+          const smokeGeo = new THREE.DodecahedronGeometry(0.48, 1);
+          for (let i = 0; i < 42; i++) {
+            const mat = new THREE.MeshStandardMaterial({
+              color: 0xe2e8f0,
+              transparent: true,
+              opacity: 0.0,
+              roughness: 1.0,
+              depthWrite: false
+            });
+            const puff = new THREE.Mesh(smokeGeo, mat);
+            puff.visible = false;
+            scene.add(puff);
+            this.smokeParticles.push({
+              mesh: puff,
+              age: 999,
+              maxAge: 2.4,
+              vel: new THREE.Vector3()
+            });
+          }
+          this.smokeSpawnTimer = 0;
+        }
+
+        update(dt, trainS, speedKmh) {
+          const rotMat = new THREE.Matrix4();
+          const bogieHalfSpan = 3.1 / CHUNK_LENGTH;
+
+          // Position and orient each articulated vehicle along the 3D spline
+          for (let i = 0; i < this.cars.length; i++) {
+            const carObj = this.cars[i];
+            const carS = trainS - carObj.offsetS;
+
+            const frontFrame = world.getPointAndFrame(carS + bogieHalfSpan);
+            const rearFrame = world.getPointAndFrame(carS - bogieHalfSpan);
+            const midFrame = world.getPointAndFrame(carS);
+
+            // Center position on the rails
+            carObj.mesh.position.lerpVectors(frontFrame.pos, rearFrame.pos, 0.5);
+            carObj.mesh.position.addScaledVector(midFrame.normal, 0.14);
+
+            // Forward direction from rear bogie to front bogie
+            const forward = new THREE.Vector3().subVectors(frontFrame.pos, rearFrame.pos).normalize();
+            const right = new THREE.Vector3().crossVectors(forward, midFrame.normal).normalize();
+            const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+            // Local -Z is forward for our train meshes
+            rotMat.makeBasis(right, up, forward.clone().negate());
+            carObj.mesh.quaternion.setFromRotationMatrix(rotMat);
+
+            // Save world transform metadata for cameras
+            carObj.worldPos = carObj.mesh.position.clone();
+            carObj.forward = forward;
+            carObj.right = right;
+            carObj.up = up;
+          }
+
+          // Spin wheels proportional to train speed
+          const metersPerSec = speedKmh / 3.6;
+          const wheelAngularVel = (metersPerSec / 0.42) * dt;
+          for (let i = 0; i < this.wheels.length; i++) {
+            this.wheels[i].rotation.x -= wheelAngularVel;
+          }
+
+          // Update Steam / Smoke Particles from Locomotive Smokestack
+          this.smokeSpawnTimer += dt * (1.2 + (speedKmh / 50));
+          const loco = this.cars[0];
+          if (this.smokeSpawnTimer > 0.08 && loco.worldPos) {
+            this.smokeSpawnTimer = 0;
+            const p = this.smokeParticles.find((item) => item.age >= item.maxAge);
+            if (p) {
+              p.age = 0;
+              p.maxAge = 1.8 + Math.random() * 1.1;
+              p.mesh.visible = true;
+              // Smokestack world position
+              p.mesh.position.copy(loco.worldPos)
+                .addScaledVector(loco.up, 3.65)
+                .addScaledVector(loco.forward, 2.95);
+              p.mesh.scale.setScalar(0.65);
+              p.mesh.material.opacity = 0.55;
+              p.vel.set(
+                (Math.random() - 0.5) * 1.8,
+                3.2 + Math.random() * 1.8,
+                (Math.random() - 0.5) * 1.8
+              ).addScaledVector(loco.forward, -metersPerSec * 0.22);
+            }
+          }
+
+          for (let i = 0; i < this.smokeParticles.length; i++) {
+            const p = this.smokeParticles[i];
+            if (p.age < p.maxAge) {
+              p.age += dt;
+              const progress = p.age / p.maxAge;
+              p.mesh.position.addScaledVector(p.vel, dt);
+              p.mesh.scale.setScalar(0.65 + progress * 3.4);
+              p.mesh.material.opacity = (1.0 - progress) * 0.45;
+              p.mesh.rotation.y += dt * 0.8;
+              if (p.age >= p.maxAge) {
+                p.mesh.visible = false;
+              }
+            }
+          }
+        }
+      }
+
+      const train = new ArticulatedTrain();
+
+      // ==========================================
+      // 8. AMBIENT FIREFLIES / ATMOSPHERIC DUST MOTES
+      // ==========================================
+      const particleCount = 120;
+      const fireflyGeo = new THREE.BufferGeometry();
+      const fireflyPos = new Float32Array(particleCount * 3);
+      for (let i = 0; i < particleCount * 3; i++) {
+        fireflyPos[i] = (Math.random() - 0.5) * 80;
+      }
+      fireflyGeo.setAttribute('position', new THREE.BufferAttribute(fireflyPos, 3));
+      const fireflyMat = new THREE.PointsMaterial({
+        color: 0xfde047,
+        size: 0.45,
+        transparent: true,
+        opacity: 0.75,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const fireflySystem = new THREE.Points(fireflyGeo, fireflyMat);
+      scene.add(fireflySystem);
+
+      // ==========================================
+      // 9. CINEMATIC CAMERA DIRECTOR & TOUCH ORBIT
+      // ==========================================
+      const CAMERA_MODES_META = {
+        auto: 'Авто-Режиссёр',
+        orbit: 'Свободный дрон',
+        flyby: 'Пролёт у рельс',
+        wheel: 'Колёсная пара',
+        heli: 'Вертолёт',
+        cabin: 'Из окна вагона'
+      };
+
+      const cameraDirector = {
+        mode: 'auto',          // User selected mode
+        activeShot: 'orbit',   // Actual shot being rendered
+        shotTimer: 0,
+        shotDuration: 7.5,
+        orbitYaw: 0.65,
+        orbitPitch: 0.28,
+        orbitDist: 26.0,
+        flybyAnchorPos: new THREE.Vector3(),
+        flybyNeedsReset: true,
+        smoothedCamPos: new THREE.Vector3(20, 14, 20),
+        smoothedLookAt: new THREE.Vector3(0, 6, 0),
+        cutFadeEl: document.getElementById('camera-cut-fade'),
+
+        setMode(newMode) {
+          this.mode = newMode;
+          if (newMode === 'auto') {
+            this.pickNextAutoShot(true);
+          } else {
+            this.triggerCutTransition(() => {
+              this.activeShot = newMode;
+              if (newMode === 'flyby') this.flybyNeedsReset = true;
+            });
+          }
+          document.getElementById('cam-readout').textContent = CAMERA_MODES_META[newMode] || 'Камера';
+        },
+
+        triggerCutTransition(callback) {
+          this.cutFadeEl.style.opacity = '0.45';
+          setTimeout(() => {
+            if (callback) callback();
+            this.cutFadeEl.style.opacity = '0';
+          }, 120);
+        },
+
+        pickNextAutoShot(immediate = false) {
+          const shots = ['orbit', 'flyby', 'wheel', 'heli', 'cabin'];
+          let next = shots[Math.floor(Math.random() * shots.length)];
+          if (next === this.activeShot) {
+            next = shots[(shots.indexOf(next) + 1) % shots.length];
+          }
+          this.shotTimer = 0;
+          this.shotDuration = next === 'flyby' ? 6.5 : 7.8;
+
+          const applyShot = () => {
+            this.activeShot = next;
+            if (next === 'flyby') this.flybyNeedsReset = true;
+            if (next === 'orbit') {
+              this.orbitYaw = (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random() * 1.4);
+              this.orbitPitch = 0.18 + Math.random() * 0.28;
+              this.orbitDist = 22 + Math.random() * 12;
+            }
+            document.getElementById('cam-readout').textContent = `Авто (${CAMERA_MODES_META[next]})`;
+          };
+
+          if (immediate) {
+            applyShot();
+          } else {
+            this.triggerCutTransition(applyShot);
+          }
+        },
+
+        update(dt, elapsed, trainS, speedKmh) {
+          if (this.mode === 'auto') {
+            this.shotTimer += dt;
+            if (this.shotTimer >= this.shotDuration) {
+              this.pickNextAutoShot(false);
+            }
+          }
+
+          const loco = train.cars[0];
+          const midCar = train.cars[2];
+          if (!loco.worldPos || !midCar.worldPos) return;
+
+          const desiredPos = new THREE.Vector3();
+          const desiredLook = new THREE.Vector3();
+
+          if (this.activeShot === 'orbit') {
+            // Smooth cinematic drone orbit around the train
+            if (this.mode === 'auto') {
+              this.orbitYaw += dt * 0.14;
+            }
+            const targetCenter = loco.worldPos.clone().addScaledVector(loco.forward, -6.5).addScaledVector(loco.up, 2.2);
+            const horizDist = this.orbitDist * Math.cos(this.orbitPitch);
+            const vertDist = this.orbitDist * Math.sin(this.orbitPitch);
+
+            const forwardAngle = Math.atan2(loco.forward.x, loco.forward.z);
+            const totalYaw = forwardAngle + this.orbitYaw;
+
+            desiredPos.set(
+              targetCenter.x + Math.sin(totalYaw) * horizDist,
+              Math.max(targetCenter.y + vertDist, loco.worldPos.y + 1.8),
+              targetCenter.z + Math.cos(totalYaw) * horizDist
+            );
+            desiredLook.copy(targetCenter);
+
+            this.smoothedCamPos.lerp(desiredPos, MathUtils.clamp(dt * 6.5, 0, 1));
+            this.smoothedLookAt.lerp(desiredLook, MathUtils.clamp(dt * 8.0, 0, 1));
+            camera.position.copy(this.smoothedCamPos);
+            camera.lookAt(this.smoothedLookAt);
+
+          } else if (this.activeShot === 'flyby') {
+            // Trackside stationary camera with train rushing past + camera shake
+            if (this.flybyNeedsReset) {
+              const aheadFrame = world.getPointAndFrame(trainS + 1.45);
+              const side = Math.random() > 0.5 ? 1 : -1;
+              this.flybyAnchorPos.copy(aheadFrame.pos)
+                .addScaledVector(aheadFrame.right, side * 4.6)
+                .addScaledVector(aheadFrame.normal, 1.95);
+              this.flybyNeedsReset = false;
+            }
+
+            // Reset ahead if last carriage has passed far beyond the camera
+            const tailCar = train.cars[4];
+            const distToTail = this.flybyAnchorPos.distanceTo(tailCar.worldPos);
+            const tailPassed = tailCar.forward.dot(new THREE.Vector3().subVectors(tailCar.worldPos, this.flybyAnchorPos)) > 26.0;
+            if (tailPassed || distToTail > 130) {
+              this.flybyNeedsReset = true;
+            }
+
+            camera.position.copy(this.flybyAnchorPos);
+
+            // Dynamic camera shake when train is roaring right beside the lens
+            const distToTrain = Math.min(
+              this.flybyAnchorPos.distanceTo(loco.worldPos),
+              this.flybyAnchorPos.distanceTo(midCar.worldPos)
+            );
+            if (distToTrain < 16.0 && speedKmh > 15) {
+              const shakeIntensity = Math.pow(1.0 - distToTrain / 16.0, 2) * 0.22 * (speedKmh / 90);
+              camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+              camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+            }
+
+            desiredLook.copy(loco.worldPos).addScaledVector(loco.forward, -4.0).addScaledVector(loco.up, 2.0);
+            this.smoothedLookAt.lerp(desiredLook, MathUtils.clamp(dt * 10.0, 0, 1));
+            camera.lookAt(this.smoothedLookAt);
+
+          } else if (this.activeShot === 'wheel') {
+            // Dramatic low bogie/wheel close-up camera
+            desiredPos.copy(loco.worldPos)
+              .addScaledVector(loco.right, 1.85)
+              .addScaledVector(loco.up, 0.78)
+              .addScaledVector(loco.forward, 3.2);
+
+            // Subtle high-frequency rail vibration
+            const vib = (speedKmh / 120) * 0.025;
+            desiredPos.y += Math.sin(elapsed * 42.0) * vib;
+
+            desiredLook.copy(loco.worldPos)
+              .addScaledVector(loco.right, 1.05)
+              .addScaledVector(loco.up, 0.72)
+              .addScaledVector(loco.forward, -6.0);
+
+            camera.position.copy(desiredPos);
+            camera.lookAt(desiredLook);
+
+          } else if (this.activeShot === 'heli') {
+            // Sweeping high-altitude helicopter shot
+            const sweepAngle = elapsed * 0.22;
+            desiredPos.copy(midCar.worldPos)
+              .add(new THREE.Vector3(Math.cos(sweepAngle) * 44.0, 32.0, Math.sin(sweepAngle) * 44.0));
+            desiredLook.copy(midCar.worldPos).addScaledVector(midCar.up, 2.0);
+
+            this.smoothedCamPos.lerp(desiredPos, MathUtils.clamp(dt * 3.5, 0, 1));
+            this.smoothedLookAt.lerp(desiredLook, MathUtils.clamp(dt * 5.0, 0, 1));
+            camera.position.copy(this.smoothedCamPos);
+            camera.lookAt(this.smoothedLookAt);
+
+          } else if (this.activeShot === 'cabin') {
+            // Cozy Passenger Window / Cab View looking out & slightly forward along the winding track
+            const car1 = train.cars[1];
+            const sway = Math.sin(elapsed * 3.8) * 0.04 * (speedKmh / 90);
+            desiredPos.copy(car1.worldPos)
+              .addScaledVector(car1.right, 1.38)
+              .addScaledVector(car1.up, 2.35 + sway)
+              .addScaledVector(car1.forward, 1.5);
+
+            desiredLook.copy(car1.worldPos)
+              .addScaledVector(car1.right, 14.0)
+              .addScaledVector(car1.forward, 26.0)
+              .addScaledVector(car1.up, 1.8);
+
+            camera.position.copy(desiredPos);
+            camera.lookAt(desiredLook);
+          }
+        }
+      };
+
+      // ==========================================
+      // 10. TOUCH & MOUSE ORBIT / PINCH-TO-ZOOM CONTROLS
+      // ==========================================
+      let isPointerDown = false;
+      let prevPointerX = 0;
+      let prevPointerY = 0;
+      let initialPinchDist = 0;
+
+      const domElem = renderer.domElement;
+
+      domElem.addEventListener('pointerdown', (e) => {
+        isPointerDown = true;
+        prevPointerX = e.clientX;
+        prevPointerY = e.clientY;
+        // Fade out touch hint once user interacts
+        const hint = document.getElementById('touch-hint');
+        if (hint) hint.style.opacity = '0';
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!isPointerDown) return;
+        const dx = e.clientX - prevPointerX;
+        const dy = e.clientY - prevPointerY;
+        prevPointerX = e.clientX;
+        prevPointerY = e.clientY;
+
+        // If user drags substantially while in another shot, switch to free orbit drone
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          cameraDirector.orbitYaw -= dx * 0.007;
+          cameraDirector.orbitPitch = MathUtils.clamp(cameraDirector.orbitPitch + dy * 0.006, 0.06, 1.25);
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        isPointerDown = false;
+      });
+
+      // Mouse Wheel Zoom
+      domElem.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        cameraDirector.orbitDist = MathUtils.clamp(cameraDirector.orbitDist + e.deltaY * 0.025, 10.0, 68.0);
+      }, { passive: false });
+
+      // Mobile Multi-touch Pinch-to-Zoom
+      domElem.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          initialPinchDist = Math.hypot(dx, dy);
+        }
+      }, { passive: true });
+
+      domElem.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && initialPinchDist > 0) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          const delta = initialPinchDist - dist;
+          cameraDirector.orbitDist = MathUtils.clamp(cameraDirector.orbitDist + delta * 0.08, 10.0, 68.0);
+          initialPinchDist = dist;
+        }
+      }, { passive: true });
+
+      // ==========================================
+      // 11. RESPONSIVE PORTRAIT/LANDSCAPE FOV & UI WIRING
+      // ==========================================
+      function updateCameraProjection() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const aspect = w / h;
+        camera.aspect = aspect;
+        // Widen vertical FOV automatically on portrait mobile screens so horizontal view stays cinematic
+        camera.fov = aspect < 1.0 ? MathUtils.clamp(55 / Math.pow(aspect, 0.42), 58, 82) : 52;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      }
+
+      window.addEventListener('resize', updateCameraProjection);
+      updateCameraProjection();
+
+      // Speed Control
+      let targetSpeedKmh = 85;
+      let currentSpeedKmh = 85;
+      const speedSlider = document.getElementById('speed-slider');
+      const sliderVal = document.getElementById('slider-val');
+      const speedReadout = document.getElementById('speed-readout');
+      const altitudeReadout = document.getElementById('altitude-readout');
+
+      speedSlider.addEventListener('input', (e) => {
+        targetSpeedKmh = parseFloat(e.target.value);
+        sliderVal.textContent = Math.round(targetSpeedKmh);
+      });
+
+      // Camera Mode Buttons
+      const camBtns = document.querySelectorAll('.cam-btn');
+      camBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          camBtns.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          cameraDirector.setMode(btn.dataset.cam);
+        });
+      });
+
+      // Biome Mode Buttons
+      const biomeBtns = document.querySelectorAll('.biome-pill');
+      let trainS = 2.0; // Current spline segment progress
+      biomeBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          biomeBtns.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          world.setBiomeMode(btn.dataset.biome, trainS);
+        });
+      });
+
+      // Time of Day State & Smooth Interpolation
+      let currentTimeIdx = 0;
+      const btnTime = document.getElementById('btn-time');
+      const timeIcon = document.getElementById('time-icon');
+      const timeLabel = document.getElementById('time-label');
+
+      btnTime.addEventListener('click', () => {
+        currentTimeIdx = (currentTimeIdx + 1) % TIME_PRESETS.length;
+        const p = TIME_PRESETS[currentTimeIdx];
+        timeIcon.textContent = p.icon;
+        timeLabel.textContent = p.name;
+      });
+
+      // Audio Toggle & Horn Buttons
+      const btnAudio = document.getElementById('btn-audio');
+      const audioIcon = document.getElementById('audio-icon');
+      const audioLabel = document.getElementById('audio-label');
+
+      function updateAudioUI(isOn) {
+        audioIcon.textContent = isOn ? '🔊' : '🔇';
+        audioLabel.textContent = isOn ? 'Звук Вкл' : 'Звук Выкл';
+        btnAudio.classList.toggle('active', isOn);
+      }
+
+      btnAudio.addEventListener('click', () => {
+        const isOn = audioEngine.toggle();
+        updateAudioUI(isOn);
+      });
+
+      const btnHorn = document.getElementById('btn-horn');
+      btnHorn.addEventListener('click', () => {
+        audioEngine.triggerHorn();
+      });
+
+      // Keyboard Shortcuts (Space / H for Horn, C for Camera, T for Time)
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' || e.code === 'KeyH') {
+          audioEngine.triggerHorn();
+        } else if (e.code === 'KeyT') {
+          btnTime.click();
+        }
+      });
+
+      // Toggle Bottom Dock Visibility for pure unobstructed viewing
+      const btnToggleHud = document.getElementById('btn-toggle-hud');
+      const bottomDock = document.getElementById('bottom-dock');
+      let hudVisible = true;
+      btnToggleHud.addEventListener('click', () => {
+        hudVisible = !hudVisible;
+        bottomDock.style.opacity = hudVisible ? '1' : '0';
+        bottomDock.style.pointerEvents = hudVisible ? 'auto' : 'none';
+        bottomDock.style.transform = hudVisible ? 'translateY(0)' : 'translateY(24px)';
+      });
+
+      // Auto-hide touch hint after 5 seconds
+      setTimeout(() => {
+        const hint = document.getElementById('touch-hint');
+        if (hint) hint.style.opacity = '0';
+      }, 5500);
+
+      // ==========================================
+      // 12. MAIN ANIMATION & SIMULATION LOOP
+      // ==========================================
+      const clock = new THREE.Clock();
+      let elapsedTime = 0;
+
+      function updateAtmosphere(dt) {
+        const preset = TIME_PRESETS[currentTimeIdx];
+        const lerpRate = MathUtils.clamp(dt * 2.2, 0, 1);
+
+        skyMat.uniforms.topColor.value.lerp(preset.skyTop, lerpRate);
+        skyMat.uniforms.bottomColor.value.lerp(preset.skyHorizon, lerpRate);
+        skyMat.uniforms.starOpacity.value = MathUtils.lerp(skyMat.uniforms.starOpacity.value, preset.starOpacity, lerpRate);
+
+        scene.fog.color.lerp(preset.fogColor, lerpRate);
+        scene.fog.density = MathUtils.lerp(scene.fog.density, preset.fogDensity, lerpRate);
+
+        sunLight.color.lerp(preset.sunColor, lerpRate);
+        sunLight.intensity = MathUtils.lerp(sunLight.intensity, preset.sunIntensity, lerpRate);
+
+        hemiLight.color.lerp(preset.hemiSky, lerpRate);
+        hemiLight.groundColor.lerp(preset.hemiGround, lerpRate);
+        hemiLight.intensity = MathUtils.lerp(hemiLight.intensity, preset.hemiIntensity, lerpRate);
+
+        // Adjust glowing windows and locomotive headlight intensity
+        sharedMaterials.warmWindow.emissiveIntensity = MathUtils.lerp(
+          sharedMaterials.warmWindow.emissiveIntensity,
+          preset.windowEmission,
+          lerpRate
+        );
+        sharedMaterials.citySkyscraper.emissiveIntensity = MathUtils.lerp(
+          sharedMaterials.citySkyscraper.emissiveIntensity,
+          preset.windowEmission,
+          lerpRate
+        );
+        if (train.headlight && train.headlightCone) {
+          train.headlight.intensity = MathUtils.lerp(train.headlight.intensity, preset.headlightPower, lerpRate);
+          train.headlightCone.material.opacity = MathUtils.lerp(
+            train.headlightCone.material.opacity,
+            preset.headlightPower > 1.0 ? 0.14 : 0.015,
+            lerpRate
+          );
+        }
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const dt = Math.min(clock.getDelta(), 0.1);
+        elapsedTime += dt;
+
+        // Smoothly interpolate train speed
+        currentSpeedKmh = MathUtils.lerp(currentSpeedKmh, targetSpeedKmh, MathUtils.clamp(dt * 3.0, 0, 1));
+        speedReadout.textContent = Math.round(currentSpeedKmh);
+
+        // Advance spline coordinate `trainS`
+        const metersPerSec = currentSpeedKmh / 3.6;
+        trainS += (metersPerSec * dt) / CHUNK_LENGTH;
+
+        // Stream upcoming procedural chunks & recycle old chunks
+        world.updateStream(trainS);
+
+        // Update articulated train cars, wheels & steam particles
+        train.update(dt, trainS, currentSpeedKmh);
+
+        // Keep SkyDome, Directional Sun Shadow Box & Fireflies centered around the train
+        const locoPos = train.cars[0].worldPos;
+        if (locoPos) {
+          skyDome.position.copy(locoPos);
+          const preset = TIME_PRESETS[currentTimeIdx];
+          sunLight.position.copy(locoPos).add(preset.sunPos);
+          sunLight.target.position.copy(locoPos);
+
+          // Update Telemetry Biome & Altitude Readout
+          const currentFrame = world.getPointAndFrame(trainS);
+          const activeBiome = BIOMES[currentFrame.biomeId];
+          document.getElementById('biome-icon').textContent = activeBiome.icon;
+          document.getElementById('biome-label').textContent = activeBiome.name;
+          altitudeReadout.textContent = Math.round(locoPos.y * 8);
+
+          // Animate floating fireflies/dust motes around the train
+          fireflySystem.position.set(
+            Math.floor(locoPos.x / 40) * 40,
+            locoPos.y + 3 + Math.sin(elapsedTime * 1.2) * 0.8,
+            Math.floor(locoPos.z / 40) * 40
+          );
+        }
+
+        // Update Time of Day & Atmospheric Lighting
+        updateAtmosphere(dt);
+
+        // Update Cinematic Camera Director
+        cameraDirector.update(dt, elapsedTime, trainS, currentSpeedKmh);
+
+        // Update Procedural Web Audio Engine
+        audioEngine.update(dt, currentSpeedKmh, locoPos ? locoPos.y : 10);
+
+        renderer.render(scene, camera);
+      }
+
+      window.onload = function () {
+        world.updateStream(trainS);
+        train.update(0.016, trainS, currentSpeedKmh);
+        animate();
+      };
+    })();
+  </script>
+</body>
+</html>

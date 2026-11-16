@@ -1,0 +1,19 @@
+{
+  "name": "oneshot-html-pages",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-project static HTML and frontend-only Node.js showcase builder for GitHub Pages",
+  "scripts": {
+    "discover": "node scripts/build-pages.mjs --discover",
+    "check": "node scripts/build-pages.mjs --check",
+    "build": "node scripts/build-pages.mjs",
+    "build:pages": "node scripts/build-pages.mjs --base-path=/oneshot-html",
+    "preview": "node scripts/preview.mjs",
+    "preview:pages": "node scripts/preview.mjs --base-path=/oneshot-html",
+    "test": "node --test scripts/build-pages.test.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

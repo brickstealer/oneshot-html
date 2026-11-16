@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Generated GitHub Pages site & build caches
+_site/
+.pages-cache/
+
+# Framework build outputs
+.next/
+out/
+dist/
+build/
+.astro/
+.svelte-kit/
+.nuxt/
+.output/
+.turbo/
+.parcel-cache/
+.vite/
+coverage/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS & logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

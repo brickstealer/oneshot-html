@@ -1,0 +1,6 @@
+{
+  "name": "TransBiome Express — Процедурный Симулятор Поезда",
+  "description": "Кинематографическая 3D-симуляция поезда в бесконечном процедурно генерируемом мире с городами, деревнями, лесами и горными серпантинами.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
