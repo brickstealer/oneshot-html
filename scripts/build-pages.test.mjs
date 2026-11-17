@@ -135,6 +135,12 @@ test('checkProjects flags Next.js standalone config and root-relative HTML links
       'web/next-good/next.config.ts':
         'export default { output: "export", basePath: process.env.PAGES_BASE_PATH || "", images: { unoptimized: true } };',
       'html/root-link.html': '<html><script src="/bundle.js"></script></html>',
+      'web/vite-root-asset/package.json': JSON.stringify({
+        name: 'vite-root-asset',
+        scripts: { build: 'vite build' },
+        devDependencies: { vite: '^8.0.0' },
+      }),
+      'web/vite-root-asset/src/scene.ts': "const tex = '/src/assets/images/stone.jpg';",
     });
 
     const workspace = await discoverWorkspace(rootDir);
@@ -152,6 +158,11 @@ test('checkProjects flags Next.js standalone config and root-relative HTML links
     assert.ok(
       findings.some(
         (f) => f.projectId === 'html/root-link.html' && f.level === 'warn',
+      ),
+    );
+    assert.ok(
+      findings.some(
+        (f) => f.projectId === 'web/vite-root-asset' && f.level === 'warn' && f.message.includes('/src/assets/'),
       ),
     );
   });

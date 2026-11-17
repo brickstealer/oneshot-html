@@ -1,0 +1,6 @@
+{
+  "name": "Jackie Chan Stunt Lab 3D",
+  "description": "Процедурная 3D-симуляция кунг-фу файтинга в стиле фильмов с Джеки Чаном с активной рэгдолл-физикой, интерактивным окружением и автоматической режиссурой трюков.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

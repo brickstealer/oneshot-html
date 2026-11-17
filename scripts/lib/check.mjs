@@ -131,11 +131,11 @@ export async function checkProjects(projects) {
         await checkViteProject(project, findings);
       }
 
-      // Warn if client code appears to reference non-public env vars
+      // Warn if client code appears to reference non-public env vars or root-relative asset paths
       for (const codeDir of ['app', 'src', 'components', 'pages']) {
         const fullDir = path.join(project.absPath, codeDir);
         if (await pathExists(fullDir)) {
-          await scanDirForSecretsWarning(fullDir, project.id, findings);
+          await scanClientCodeWarnings(fullDir, project, findings);
         }
       }
     } else if (project.kind === 'static-html') {
@@ -152,7 +152,7 @@ export async function checkProjects(projects) {
   return findings;
 }
 
-async function scanDirForSecretsWarning(dirPath, projectId, findings) {
+async function scanClientCodeWarnings(dirPath, project, findings) {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink() || entry.name.startsWith('.')) {
@@ -160,13 +160,21 @@ async function scanDirForSecretsWarning(dirPath, projectId, findings) {
     }
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      await scanDirForSecretsWarning(fullPath, projectId, findings);
+      await scanClientCodeWarnings(fullPath, project, findings);
       continue;
     }
     if (!/\.(tsx?|jsx?|mjs)$/i.test(entry.name)) {
       continue;
     }
     const content = (await readTextOptional(fullPath)) ?? '';
+    if (project.framework === 'vite' && /['"]\/src\/assets\//.test(content)) {
+      findings.push({
+        level: 'warn',
+        projectId: project.id,
+        message: `${entry.name} uses root-relative "/src/assets/..." URL.`,
+        hint: 'Prefix with `${import.meta.env.BASE_URL}src/assets/...` so assets resolve under /<repo>/<project>/.',
+      });
+    }
     const matches = content.match(/\bprocess\.env\.([A-Z0-9_]+)/g) ?? [];
     for (const match of matches) {
       const varName = match.replace('process.env.', '');
@@ -180,7 +188,7 @@ async function scanDirForSecretsWarning(dirPath, projectId, findings) {
       }
       findings.push({
         level: 'warn',
-        projectId,
+        projectId: project.id,
         message: `${entry.name} references process.env.${varName}.`,
         hint: 'Static builds cannot use server secrets at runtime. Move to user-provided input or remove unused server code.',
       });

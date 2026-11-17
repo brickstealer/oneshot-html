@@ -106,7 +106,7 @@ export default defineConfig(({command}) => {
 });
 ```
 - Also avoid hardcoded `base: '/'`. (If `base` is omitted completely and the build script is plain `vite build`, the orchestrator automatically passes `--base=<projectBasePath>/`.)
-- Use `import.meta.env.BASE_URL` when referencing files inside `public/`.
+- Use `import.meta.env.BASE_URL` when referencing files inside `public/` or unbundled `/src/assets/...` (AI Studio Vite templates often hardcode `'/src/assets/...'` alongside a `copy-unbundled-src-assets` plugin, which breaks under subpath hosting unless prefixed with `` `${import.meta.env.BASE_URL}src/assets/...` ``).
 - **AI Studio Vite template gotcha**: some exports pin `"esbuild": "^0.25.0"` alongside `"vite": "^8.3.0"`, which causes `npm install` to fail with `ERESOLVE` (`vite` expects `esbuild@^0.27 || ^0.28`). If `esbuild` is unused in project code, remove that redundant `devDependencies` pin so clean `npm install` succeeds in CI.
 
 #### D. Astro / CRA / Generic Node Bundlers
