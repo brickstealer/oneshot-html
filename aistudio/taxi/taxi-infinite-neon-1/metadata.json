@@ -1,0 +1,6 @@
+{
+  "name": "AutoTaxi Infinity 3D",
+  "description": "Гиперреалистичная 3D-симуляция автономного такси в бесконечном процедурном мире с разнообразными биомами, кинематографической камерой и бесконечными апгрейдами.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
