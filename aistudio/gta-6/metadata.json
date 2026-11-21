@@ -1,0 +1,8 @@
+{
+  "name": "Vice Horizon VI — 3D Симуляция",
+  "description": "Гиперреалистичная 3D-симуляция автоматической игры в стиле GTA 6 в процедурном бесконечном мире с биомами, полицейскими погонями, ограблениями банков и кинематографической камерой.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
