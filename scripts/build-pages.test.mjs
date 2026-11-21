@@ -200,5 +200,10 @@ test('buildPages assembles static projects, hierarchy index.html, 404.html, and 
     assert.match(indexContent, /href="\.\/experiments\/ui\/card\.html"/);
     assert.match(indexContent, /href="\.\/experiments\/canvas-app\/"/);
     assert.match(indexContent, /Glass &lt;Card&gt;/);
+
+    const notFoundContent = await fs.readFile(path.join(rootDir, '_site', '404.html'), 'utf8');
+    assert.match(notFoundContent, /http-equiv="refresh" content="0; url=\/oneshot-html\/"/);
+    assert.match(notFoundContent, /window\.location\.replace\(target\)/);
+    assert.match(notFoundContent, /href="\/oneshot-html\/"/);
   });
 });

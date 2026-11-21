@@ -748,16 +748,26 @@ export function renderIndexHtml({
 }
 
 /**
- * Generates a fallback 404.html page with a relative link back to the catalog home.
+ * Generates a fallback 404.html page that immediately redirects back to the catalog home.
  */
 export function renderNotFoundHtml({ repoName, siteBasePath }) {
   const homeHref = siteBasePath ? `${siteBasePath}/` : '/';
+  const safeHomeJson = JSON.stringify(homeHref).replace(/</g, '\\u003c');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>404 — ${escapeHtml(repoName)}</title>
+  <meta http-equiv="refresh" content="0; url=${escapeHtml(homeHref)}" />
+  <title>Redirecting — ${escapeHtml(repoName)}</title>
+  <script>
+    (function () {
+      var target = ${safeHomeJson};
+      if (window.location.pathname !== target) {
+        window.location.replace(target);
+      }
+    })();
+  </script>
   <style>
     body {
       margin: 0;
@@ -792,9 +802,9 @@ export function renderNotFoundHtml({ repoName, siteBasePath }) {
 </head>
 <body>
   <main class="card">
-    <h1>404 — Page Not Found</h1>
-    <p>This project or path does not exist in ${escapeHtml(repoName)}.</p>
-    <a href="${escapeHtml(homeHref)}">Back to catalog</a>
+    <h1>Page Not Found</h1>
+    <p>Redirecting to ${escapeHtml(repoName)} catalog...</p>
+    <a href="${escapeHtml(homeHref)}">Go to catalog</a>
   </main>
 </body>
 </html>

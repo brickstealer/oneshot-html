@@ -4,8 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({command}) => {
+  const pagesBase = process.env.PAGES_BASE_PATH?.replace(/\/+$/, '');
+  const base = pagesBase ? `${pagesBase}/` : command === 'serve' ? '/' : './';
+
   return {
+    base,
     plugins: [
       react(),
       tailwindcss(),
